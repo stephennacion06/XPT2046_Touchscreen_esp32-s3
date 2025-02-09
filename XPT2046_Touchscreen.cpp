@@ -23,24 +23,50 @@
 #include "XPT2046_Touchscreen.h"
 
 #define Z_THRESHOLD     300
-#define Z_THRESHOLD_INT	75
+#define Z_THRESHOLD_INT 75
 #define MSEC_THRESHOLD  3
 #define SPI_SETTING     SPISettings(2000000, MSBFIRST, SPI_MODE0)
 
-static XPT2046_Touchscreen 	*isrPinptr;
+// Define default pins if not already defined
+#ifndef TOUCH_CS
+#define TOUCH_CS 16  // Chip Select for touch controller
+#endif
+
+#ifndef XPT2046_IRQ
+#define XPT2046_IRQ 7  // Optional: Touch interrupt pin
+#endif
+
+#ifndef XPT2046_MISO
+#define XPT2046_MISO 18
+#endif
+
+#ifndef XPT2046_MOSI
+#define XPT2046_MOSI 17
+#endif
+
+#ifndef XPT2046_CLK
+#define XPT2046_CLK 15
+#endif
+
+static XPT2046_Touchscreen *isrPinptr;
 void isrPin(void);
 
 bool XPT2046_Touchscreen::begin(SPIClass &wspi)
 {
 	_pspi = &wspi;
-	_pspi->begin();
-	pinMode(csPin, OUTPUT);
-	digitalWrite(csPin, HIGH);
-	if (255 != tirqPin) {
-		pinMode( tirqPin, INPUT );
-		attachInterrupt(digitalPinToInterrupt(tirqPin), isrPin, FALLING);
+
+	// Ensure SPI uses the defined pins if not explicitly set
+	_pspi->begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, TOUCH_CS);
+
+	pinMode(TOUCH_CS, OUTPUT);
+	digitalWrite(TOUCH_CS, HIGH);
+
+	if (255 != XPT2046_IRQ) {
+		pinMode(XPT2046_IRQ, INPUT);
+		attachInterrupt(digitalPinToInterrupt(XPT2046_IRQ), isrPin, FALLING);
 		isrPinptr = this;
 	}
+
 	return true;
 }
 
@@ -48,7 +74,7 @@ bool XPT2046_Touchscreen::begin(SPIClass &wspi)
 #define FLEXSPI_SETTING     FlexIOSPISettings(2000000, MSBFIRST, SPI_MODE0)
 bool XPT2046_Touchscreen::begin(FlexIOSPI &wflexspi)
 {
-	_pspi = nullptr; // make sure we dont use this one... 
+	_pspi = nullptr; // make sure we dont use this one...
 	_pflexspi = &wflexspi;
 	_pflexspi->begin();
 	pinMode(csPin, OUTPUT);
@@ -144,7 +170,7 @@ void XPT2046_Touchscreen::update()
 		data[5] = _pspi->transfer16(0) >> 3;
 		digitalWrite(csPin, HIGH);
 		_pspi->endTransaction();
-	}	
+	}
 #if defined(_FLEXIO_SPI_H_)
 	else if (_pflexspi) {
 		_pflexspi->beginTransaction(FLEXSPI_SETTING);
@@ -169,7 +195,7 @@ void XPT2046_Touchscreen::update()
 
 	}
 #endif
-	// If we do not have either _pspi or _pflexspi than bail. 
+	// If we do not have either _pspi or _pflexspi than bail.
 	else return;
 
 	//Serial.printf("z=%d  ::  z1=%d,  z2=%d  ", z, z1, z2);
@@ -183,14 +209,14 @@ void XPT2046_Touchscreen::update()
 		return;
 	}
 	zraw = z;
-	
+
 	// Average pair with least distance between each measured x then y
 	//Serial.printf("    z1=%d,z2=%d  ", z1, z2);
 	//Serial.printf("p=%d,  %d,%d  %d,%d  %d,%d", zraw,
 		//data[0], data[1], data[2], data[3], data[4], data[5]);
 	int16_t x = besttwoavg( data[0], data[2], data[4] );
 	int16_t y = besttwoavg( data[1], data[3], data[5] );
-	
+
 	//Serial.printf("    %d,%d", x, y);
 	//Serial.println();
 	if (z >= Z_THRESHOLD) {
@@ -214,6 +240,3 @@ void XPT2046_Touchscreen::update()
 		}
 	}
 }
-
-
-
